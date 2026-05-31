@@ -81,9 +81,20 @@ pnpm build       # Production build
 pnpm format      # Prettier
 ```
 
+## Legal
+
+| Document | Link |
+|----------|------|
+| Terms & Conditions | [/terms](https://github.com/chayprabs/tls-dns-checker/blob/main/apps/web/src/app/terms/page.tsx) (live: `/terms`) |
+| Privacy Policy | [/privacy](https://github.com/chayprabs/tls-dns-checker/blob/main/apps/web/src/app/privacy/page.tsx) (live: `/privacy`) |
+| Software license | [LICENSE](./LICENSE) (AGPL-3.0) |
+| Legal notice | [NOTICE.md](./NOTICE.md) |
+
+Diagnostic results are informational only, not professional advice. See Terms for limitation of liability and acceptable use.
+
 ## Self-host & license
 
-AGPL-3.0 — see [LICENSE](./LICENSE). Contributions: [CONTRIBUTING.md](./CONTRIBUTING.md). Security: [SECURITY.md](./SECURITY.md).
+AGPL-3.0 — see [LICENSE](./LICENSE) and [NOTICE.md](./NOTICE.md). Contributions: [CONTRIBUTING.md](./CONTRIBUTING.md). Security: [SECURITY.md](./SECURITY.md).
 
 ## Links
 

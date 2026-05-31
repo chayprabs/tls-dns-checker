@@ -8,6 +8,14 @@ export function SiteFooter() {
         <a href="/terms" className="hover:text-[var(--foreground)]">
           Terms &amp; Conditions
         </a>
+        <a
+          href="https://github.com/chayprabs/tls-dns-checker/blob/main/LICENSE"
+          className="hover:text-[var(--foreground)]"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          License (AGPL-3.0)
+        </a>
       </div>
     </footer>
   );
