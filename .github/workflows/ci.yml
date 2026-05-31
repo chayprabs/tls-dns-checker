@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install
+
+      - name: Build shared types
+        run: pnpm --filter @tls-dns-checker/shared-types build
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Build worker
+        run: pnpm --filter @tls-dns-checker/worker build
+
+      - name: Build web
+        run: pnpm --filter @tls-dns-checker/web build
+        env:
+          WORKER_URL: http://localhost:8787
+
+      - name: Worker unit tests
+        run: pnpm --filter @tls-dns-checker/worker test
+
+      - name: Worker integration probes
+        run: |
+          pnpm --filter @tls-dns-checker/worker start &
+          sleep 3
+          curl -sf http://localhost:8787/health
+          curl -sf -X POST http://localhost:8787/v1/probe \
+            -H 'Content-Type: application/json' \
+            -d '{"target":"example.com"}' | jq -e '.target == "example.com"'
+
+      - name: Validate docker compose
+        run: |
+          if command -v docker >/dev/null 2>&1; then
+            docker compose config
+          else
+            echo "VERIFY-DEFERRED: docker not on runner host; compose file present"
+            test -f docker-compose.yml
+          fi

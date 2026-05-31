@@ -1,0 +1,24 @@
+{
+  "name": "tls-dns-checker",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Check DNS, RDAP, TLS, certificate chain, ASN and socket banners online",
+  "license": "AGPL-3.0-or-later",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "pnpm -r run build",
+    "dev": "pnpm --parallel -r run dev",
+    "lint": "pnpm -r run lint",
+    "typecheck": "pnpm -r run typecheck",
+    "test": "pnpm -r run test",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2"
+  }
+}

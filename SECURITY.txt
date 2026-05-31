@@ -1,0 +1,3 @@
+Contact: https://github.com/chayprabs/tls-dns-checker/security/advisories
+Preferred-Languages: en
+Canonical: https://github.com/chayprabs/tls-dns-checker/blob/main/SECURITY.txt
