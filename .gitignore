@@ -23,6 +23,8 @@ out/
 coverage/
 playwright-report/
 test-results/
+apps/worker/dist/
+packages/shared-types/dist/
 
 # Local planning documents
 PRODUCT_REQUIREMENTS.md

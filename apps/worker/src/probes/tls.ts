@@ -12,17 +12,24 @@ export async function probeTls(
   const useSni = !isIp && !isIpAddress(host);
 
   return new Promise((resolve) => {
-    const socket = tls.connect(tlsConnectOptions(host, port), () => {
+    const options = tlsConnectOptions(host, port);
+
+    const socket = tls.connect(options, () => {
       const cipher = socket.getCipher();
       const protocol = socket.getProtocol() ?? undefined;
       const alpn = socket.alpnProtocol ? [socket.alpnProtocol] : undefined;
+      const cert = socket.getPeerCertificate(true);
+      const ocspStapling = Boolean(
+        cert &&
+          (cert as tls.PeerCertificate & { ocspResponse?: Buffer }).ocspResponse?.length,
+      );
 
       resolve({
         protocol: protocol ?? undefined,
         cipher: cipher ? `${cipher.name} ${cipher.version}` : undefined,
         alpn,
         sni: useSni ? host : undefined,
-        ocspStapling: false,
+        ocspStapling,
         sessionResumption: socket.isSessionReused?.() ?? false,
         supportedVersions: protocol ? [protocol] : undefined,
       });

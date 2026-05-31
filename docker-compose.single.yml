@@ -1,0 +1,12 @@
+# Single-container dev: worker only (use `pnpm dev` for web locally)
+services:
+  worker:
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    ports:
+      - '8787:8787'
+    environment:
+      - NODE_ENV=production
+      - PORT=8787
+      - PROBE_IP_RANGE=${PROBE_IP_RANGE:-0.0.0.0/0}

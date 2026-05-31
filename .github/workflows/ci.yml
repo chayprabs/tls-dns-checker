@@ -47,6 +47,12 @@ jobs:
           curl -sf -X POST http://localhost:8787/v1/probe \
             -H 'Content-Type: application/json' \
             -d '{"target":"example.com"}' | jq -e '.target == "example.com"'
+          curl -sf -X POST http://localhost:8787/v1/probe \
+            -H 'Content-Type: application/json' \
+            -d '{"target":"google.com"}' | jq -e '.dns.records | length > 0 and .cert.chain | length > 0'
+          curl -sf -X POST http://localhost:8787/v1/probe \
+            -H 'Content-Type: application/json' \
+            -d '{"target":"expired.badssl.com"}' | jq -e '.cert.chain[0].warning != null'
 
       - name: Validate docker compose
         run: |

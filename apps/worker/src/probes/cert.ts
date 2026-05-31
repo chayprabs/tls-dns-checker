@@ -10,8 +10,8 @@ export async function probeCert(
 ): Promise<CertResult> {
   const hostname = normalizeDomain(target);
 
-  const peerCert = await getPeerCertificate(hostname, port);
-  const chain = peerCert ? [parseCert(peerCert, hostname)] : [];
+  const peerCerts = await getPeerCertificateChain(hostname, port);
+  const chain = peerCerts.map((c, i) => parseCert(c, hostname, i === 0));
 
   if (chain.length > 0 && !isIp) {
     try {
@@ -28,30 +28,53 @@ export async function probeCert(
   return { chain, hostname };
 }
 
-function getPeerCertificate(host: string, port: number): Promise<tls.PeerCertificate | null> {
+function getPeerCertificateChain(
+  host: string,
+  port: number,
+): Promise<tls.PeerCertificate[]> {
   return new Promise((resolve) => {
-    const socket = tls.connect(tlsConnectOptions(host, port), () => {
-      const cert = socket.getPeerCertificate(true);
+    const socket = tls.connect(tlsConnectOptions(host, port));
+    socket.on('secureConnect', () => {
+      const leaf = socket.getPeerCertificate(true);
       socket.end();
-      resolve(cert && Object.keys(cert).length > 0 ? cert : null);
+      resolve(leaf && Object.keys(leaf).length > 0 ? flattenChain(leaf) : []);
     });
-    socket.on('error', () => resolve(null));
+    socket.on('error', () => resolve([]));
     socket.on('timeout', () => {
       socket.destroy();
-      resolve(null);
+      resolve([]);
     });
   });
 }
 
-function parseCert(cert: tls.PeerCertificate, hostname: string): CertInfo {
+function flattenChain(leaf: tls.PeerCertificate): tls.PeerCertificate[] {
+  const chain: tls.PeerCertificate[] = [];
+  let current: tls.PeerCertificate | undefined = leaf;
+
+  for (let depth = 0; depth < 12 && current; depth++) {
+    if (!current.valid_from && !current.serialNumber) break;
+    chain.push(current);
+    const issuerCert: tls.PeerCertificate | undefined = (
+      current as tls.PeerCertificate & { issuerCertificate?: tls.PeerCertificate }
+    ).issuerCertificate;
+    if (!issuerCert || issuerCert === current || !issuerCert.valid_from) break;
+    current = issuerCert;
+  }
+
+  return chain.length > 0 ? chain : [leaf];
+}
+
+function parseCert(cert: tls.PeerCertificate, hostname: string, isLeaf = true): CertInfo {
   const validFrom = cert.valid_from ?? '';
   const validTo = cert.valid_to ?? '';
   const end = new Date(validTo).getTime();
   const daysRemaining = Math.ceil((end - Date.now()) / (1000 * 60 * 60 * 24));
 
   let warning: CertInfo['warning'] = null;
-  if (daysRemaining <= 0) warning = 'expired';
-  else if (daysRemaining <= 30) warning = 'expiring';
+  if (isLeaf) {
+    if (daysRemaining <= 0) warning = 'expired';
+    else if (daysRemaining <= 30) warning = 'expiring';
+  }
 
   const subject = cert.subject?.CN ?? cert.subjectaltname ?? hostname;
   const issuer = cert.issuer?.O ?? cert.issuer?.CN ?? 'Unknown';
@@ -67,11 +90,12 @@ function parseCert(cert: tls.PeerCertificate, hostname: string): CertInfo {
 
   const curve = (cert as { asn1Curve?: string }).asn1Curve;
   const bits = (cert as { bits?: number }).bits;
-  const keyAlgorithm = curve
-    ? `ECDSA-${curve}`
-    : bits
-      ? `RSA-${bits}`
-      : undefined;
+  const keyAlgorithm = curve ? `ECDSA-${curve}` : bits ? `RSA-${bits}` : undefined;
+
+  const infoAccessRaw = (cert as { infoAccess?: string | unknown }).infoAccess;
+  const infoAccess =
+    typeof infoAccessRaw === 'string' ? infoAccessRaw : JSON.stringify(infoAccessRaw ?? '');
+  const ocspUrl = infoAccess.match(/OCSP - URI:([^\n]+)/i)?.[1]?.trim();
 
   return {
     subject: String(subject),
@@ -84,7 +108,7 @@ function parseCert(cert: tls.PeerCertificate, hostname: string): CertInfo {
     signatureAlgorithm: (cert as { signature?: string }).signature,
     serialNumber: cert.serialNumber,
     warning,
-    ocsp: { status: 'not-checked', url: undefined },
+    ocsp: { status: ocspUrl ? 'url-present' : 'not-checked', url: ocspUrl },
     crl: [],
   };
 }
