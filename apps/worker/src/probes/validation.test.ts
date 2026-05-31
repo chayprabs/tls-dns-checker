@@ -50,6 +50,28 @@ describe('valid input/output', () => {
     expect(body.http.hops[0]?.status).toBeGreaterThan(0);
   }, 15000);
 
+  it('expired.badssl.com full probe has cert warning', async () => {
+    const res = await app.request('http://localhost/v1/probe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target: 'expired.badssl.com' }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { cert: { chain: { warning?: string }[] } };
+    expect(body.cert.chain[0]?.warning).toBe('expired');
+  }, 30000);
+
+  it('https URL path returns 404 for example.com/path', async () => {
+    const res = await app.request('http://localhost/v1/http', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target: 'https://example.com/path' }),
+    });
+    const body = (await res.json()) as { http: { hops: { url: string; status: number }[] } };
+    expect(body.http.hops[0]?.url).toContain('/path');
+    expect(body.http.hops[0]?.status).toBe(404);
+  }, 15000);
+
   it('rejects invalid port', async () => {
     const res = await app.request('http://localhost/v1/probe', {
       method: 'POST',

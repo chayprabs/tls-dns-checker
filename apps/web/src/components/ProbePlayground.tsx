@@ -90,12 +90,22 @@ export function ProbePlayground({
   }, [autoRun, initialTarget, runProbeRequest]);
 
   const handleHistorySelect = async (id: string) => {
+    if (!id) return;
     setSelectedHistoryId(id);
     const h = history.find((x) => x.id === id);
-    if (!h) return;
+    if (!h) {
+      setSelectedHistoryId('');
+      return;
+    }
     setTarget(h.target);
+    setError(null);
     const entry = await fetchHistoryEntry(id);
-    if (entry?.result) setResult(entry.result);
+    if (entry?.result) {
+      setResult(entry.result);
+    } else {
+      setResult(null);
+      setError('Saved result not found for this probe — run probe again');
+    }
     setSelectedHistoryId('');
   };
 

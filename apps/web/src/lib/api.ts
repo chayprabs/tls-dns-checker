@@ -6,23 +6,34 @@ const FRIENDLY: Record<string, string> = {
   'String must contain at least 1 character(s)': 'Target is required',
   'Number must be less than or equal to 65535': 'Port must be between 1 and 65535',
   'Number must be greater than or equal to 1': 'Port must be at least 1',
+  'Port must be 65535 or less': 'Port must be between 1 and 65535',
+  'Port must be at least 1': 'Port must be at least 1',
+  'Target is required': 'Target is required',
+  'Target too long': 'Target is too long',
   'Invalid email': 'Enter a valid email address',
+  'Enter a valid email address': 'Enter a valid email address',
+  'Invalid hostname': 'Enter a valid domain or hostname',
+  'Invalid target format': 'Enter a valid domain, IP, or hostname:port',
 };
 
+function friendlyMessage(msg: string): string {
+  return FRIENDLY[msg] ?? msg;
+}
+
 function formatApiError(err: unknown, fallback: string): string {
-  if (typeof err === 'string') return FRIENDLY[err] ?? err;
+  if (typeof err === 'string') return friendlyMessage(err);
   if (err && typeof err === 'object') {
     const e = err as { fieldErrors?: Record<string, string[]>; formErrors?: string[] };
-    const parts = [...(e.formErrors ?? [])];
+    const parts = [...(e.formErrors ?? []).map(friendlyMessage)];
     if (e.fieldErrors) {
       for (const [k, v] of Object.entries(e.fieldErrors)) {
-        const msgs = v.map((m) => FRIENDLY[m] ?? m);
+        const msgs = v.map((m) => friendlyMessage(m));
         parts.push(`${k}: ${msgs.join(', ')}`);
       }
     }
     if (parts.length) return parts.join('; ');
   }
-  return fallback;
+  return friendlyMessage(fallback);
 }
 
 export async function runProbe(req: ProbeRequest): Promise<ProbeResult> {
@@ -60,8 +71,8 @@ export async function subscribeAlerts(email: string, target: string): Promise<st
     body: JSON.stringify({ email, target, thresholds: [30, 14, 7, 1] }),
   });
   const data = (await res.json()) as { message?: string; error?: unknown; ok?: boolean };
-  if (!res.ok) {
+  if (!res.ok || data.ok === false) {
     throw new Error(formatApiError(data.error, data.message ?? 'Subscribe failed'));
   }
-  return data.message ?? 'Subscribed';
+  return friendlyMessage(data.message ?? 'Subscribed');
 }

@@ -4,18 +4,36 @@ import type { HttpResult, HttpHop } from '@tls-dns-checker/shared-types';
 const MAX_HOPS = 10;
 const insecureAgent = new Agent({ connect: { rejectUnauthorized: false } });
 
-export async function probeHttp(targetInput: string, port = 443): Promise<HttpResult> {
+function buildInitialUrl(targetInput: string, defaultPort: number): string {
   const trimmed = targetInput.trim();
-  const useHttp = /^http:\/\//i.test(trimmed);
-  const host =
-    trimmed.replace(/^https?:\/\//i, '').split('/')[0]?.split(':')[0] ?? trimmed;
-  const explicitPort = trimmed.match(/:(\d+)(?:\/|$)/)?.[1];
-  const effectivePort = explicitPort ? Number(explicitPort) : port;
+  const urlMatch = trimmed.match(/^(https?):\/\/([^/?#]+)([/][^?#]*)?/i);
 
-  let url = useHttp ? `http://${host}` : `https://${host}`;
-  if (effectivePort !== 80 && effectivePort !== 443) {
-    url = `${useHttp ? 'http' : 'https'}://${host}:${effectivePort}`;
+  if (urlMatch) {
+    const scheme = urlMatch[1].toLowerCase();
+    const authority = urlMatch[2];
+    const path = urlMatch[3] ?? '/';
+    const hostOnly = authority.split(':')[0] ?? authority;
+    const portMatch = authority.match(/:(\d+)$/);
+    const port = portMatch ? Number(portMatch[1]) : scheme === 'http' ? 80 : 443;
+
+    if (port !== 80 && port !== 443) {
+      return `${scheme}://${hostOnly}:${port}${path}`;
+    }
+    return `${scheme}://${hostOnly}${path}`;
   }
+
+  const host = trimmed.split('/')[0]?.split(':')[0] ?? trimmed;
+  const explicitPort = trimmed.match(/:(\d+)(?:\/|$)/)?.[1];
+  const effectivePort = explicitPort ? Number(explicitPort) : defaultPort;
+  const scheme = effectivePort === 80 ? 'http' : 'https';
+  if (effectivePort !== 80 && effectivePort !== 443) {
+    return `${scheme}://${host}:${effectivePort}/`;
+  }
+  return `${scheme}://${host}/`;
+}
+
+export async function probeHttp(targetInput: string, port = 443): Promise<HttpResult> {
+  let url = buildInitialUrl(targetInput, port);
 
   const hops: HttpHop[] = [];
   let totalTimingMs = 0;

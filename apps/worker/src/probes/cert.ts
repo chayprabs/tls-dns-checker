@@ -14,11 +14,15 @@ export async function probeCert(
   const chain = peerCert ? [parseCert(peerCert, hostname)] : [];
 
   if (chain.length > 0 && !isIp) {
-    const ctLogs = await Promise.race([
-      fetchCtLogs(hostname),
-      new Promise<CertInfo['ctLogs']>((resolve) => setTimeout(() => resolve([]), 2500)),
-    ]);
-    chain[0].ctLogs = ctLogs;
+    try {
+      const ctLogs = await Promise.race([
+        fetchCtLogs(hostname).catch(() => [] as CertInfo['ctLogs']),
+        new Promise<CertInfo['ctLogs']>((resolve) => setTimeout(() => resolve([]), 2500)),
+      ]);
+      chain[0].ctLogs = ctLogs;
+    } catch {
+      chain[0].ctLogs = [];
+    }
   }
 
   return { chain, hostname };
@@ -86,13 +90,17 @@ function parseCert(cert: tls.PeerCertificate, hostname: string): CertInfo {
 }
 
 async function fetchCtLogs(domain: string): Promise<CertInfo['ctLogs']> {
-  const url = `https://crt.sh/?q=${encodeURIComponent(domain)}&output=json`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(2500) });
-  if (!res.ok) return [];
+  try {
+    const url = `https://crt.sh/?q=${encodeURIComponent(domain)}&output=json`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(2500) });
+    if (!res.ok) return [];
 
-  const entries = (await res.json()) as { issuer_name?: string; not_before?: string }[];
-  return entries.slice(0, 10).map((e) => ({
-    logName: e.issuer_name ?? 'crt.sh',
-    timestamp: e.not_before ?? '',
-  }));
+    const entries = (await res.json()) as { issuer_name?: string; not_before?: string }[];
+    return entries.slice(0, 10).map((e) => ({
+      logName: e.issuer_name ?? 'crt.sh',
+      timestamp: e.not_before ?? '',
+    }));
+  } catch {
+    return [];
+  }
 }
