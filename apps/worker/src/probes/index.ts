@@ -8,6 +8,20 @@ import { probeTls } from './tls.js';
 import { probeCert } from './cert.js';
 import { probeSocket } from './socket.js';
 
+async function safeProbe<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await fn();
+  } catch {
+    return fallback;
+  }
+}
+
+const emptyDns = (mode: 'recursive' | 'authoritative'): Awaited<ReturnType<typeof probeDns>> => ({
+  records: [],
+  dnssec: { validated: false, error: 'Probe failed' },
+  mode,
+});
+
 export async function runFullProbe(req: ProbeRequest): Promise<ProbeResult> {
   const start = Date.now();
   const parsed = parseTarget(req.target);
@@ -17,16 +31,23 @@ export async function runFullProbe(req: ProbeRequest): Promise<ProbeResult> {
   const dnsMode = req.dnsMode ?? 'recursive';
 
   const [dns, rdap, http, tlsResult, cert, socket] = await Promise.all([
-    probeDns(host, dnsMode, parsed.isIp),
-    probeRdap(host, parsed.isIp),
-    probeHttp(req.target, tlsPort),
-    probeTls(host, tlsPort, parsed.isIp),
-    probeCert(host, tlsPort, parsed.isIp),
-    probeSocket(host, socketPort),
+    safeProbe(() => probeDns(host, dnsMode, parsed.isIp), emptyDns(dnsMode)),
+    safeProbe(() => probeRdap(host, parsed.isIp), { statuses: ['error'] }),
+    safeProbe(() => probeHttp(req.target, tlsPort), {
+      finalUrl: '',
+      hops: [],
+      totalTimingMs: 0,
+    }),
+    safeProbe(() => probeTls(host, tlsPort, parsed.isIp), { sni: host }),
+    safeProbe(() => probeCert(host, tlsPort, parsed.isIp), { chain: [], hostname: host }),
+    safeProbe(() => probeSocket(host, socketPort), { port: socketPort, timingMs: 0 }),
   ]);
 
   const firstA = dns.records.find((r) => r.type === 'A')?.value;
-  const asn = await probeAsn(host, parsed.isIp ? host : firstA, parsed.isIp);
+  const asn = await safeProbe(
+    () => probeAsn(host, parsed.isIp ? host : firstA, parsed.isIp),
+    { ip: host, org: 'ASN lookup failed' },
+  );
 
   return {
     target: req.target,

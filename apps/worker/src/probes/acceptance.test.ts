@@ -15,8 +15,15 @@ describe('acceptance probes', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ target: 'example.com' }),
     });
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { target: string; dns: unknown; cert: unknown };
+    const body = (await res.json()) as {
+      target?: string;
+      dns?: unknown;
+      cert?: unknown;
+      error?: unknown;
+    };
+    if (res.status !== 200) {
+      throw new Error(`probe failed ${res.status}: ${JSON.stringify(body)}`);
+    }
     expect(body.target).toBe('example.com');
     expect(body.dns).toBeDefined();
     expect(body.cert).toBeDefined();
