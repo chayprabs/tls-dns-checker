@@ -1,11 +1,21 @@
+import { Agent, fetch as undiciFetch } from 'undici';
 import type { HttpResult, HttpHop } from '@tls-dns-checker/shared-types';
 
 const MAX_HOPS = 10;
+const insecureAgent = new Agent({ connect: { rejectUnauthorized: false } });
 
-export async function probeHttp(target: string, port = 443): Promise<HttpResult> {
-  const host = target.replace(/^https?:\/\//i, '').split('/')[0] ?? target;
-  let url = `https://${host}`;
-  if (port !== 443) url = `https://${host}:${port}`;
+export async function probeHttp(targetInput: string, port = 443): Promise<HttpResult> {
+  const trimmed = targetInput.trim();
+  const useHttp = /^http:\/\//i.test(trimmed);
+  const host =
+    trimmed.replace(/^https?:\/\//i, '').split('/')[0]?.split(':')[0] ?? trimmed;
+  const explicitPort = trimmed.match(/:(\d+)(?:\/|$)/)?.[1];
+  const effectivePort = explicitPort ? Number(explicitPort) : port;
+
+  let url = useHttp ? `http://${host}` : `https://${host}`;
+  if (effectivePort !== 80 && effectivePort !== 443) {
+    url = `${useHttp ? 'http' : 'https'}://${host}:${effectivePort}`;
+  }
 
   const hops: HttpHop[] = [];
   let totalTimingMs = 0;
@@ -14,11 +24,14 @@ export async function probeHttp(target: string, port = 443): Promise<HttpResult>
   for (let i = 0; i < MAX_HOPS; i++) {
     const start = Date.now();
     try {
-      const response = await fetch(url, {
+      const response = await undiciFetch(url, {
         method: 'GET',
         redirect: 'manual',
         signal: AbortSignal.timeout(8000),
-        headers: { 'User-Agent': 'DomainTLSProbe/1.0 (+https://github.com/chayprabs/tls-dns-checker)' },
+        dispatcher: insecureAgent,
+        headers: {
+          'User-Agent': 'DomainTLSProbe/1.0 (+https://github.com/chayprabs/tls-dns-checker)',
+        },
       });
 
       const timingMs = Date.now() - start;
@@ -46,12 +59,14 @@ export async function probeHttp(target: string, port = 443): Promise<HttpResult>
       }
       break;
     } catch (err) {
+      const timingMs = Date.now() - start;
+      totalTimingMs += timingMs;
       hops.push({
         url,
         status: 0,
         statusText: err instanceof Error ? err.message : 'Request failed',
         headers: {},
-        timingMs: Date.now() - start,
+        timingMs,
       });
       break;
     }

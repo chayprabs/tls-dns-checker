@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import type { ProbeResult } from '@tls-dns-checker/shared-types';
-import { runProbe, fetchHistory, subscribeAlerts } from '@/lib/api';
+import { runProbe, fetchHistory, fetchHistoryEntry, subscribeAlerts } from '@/lib/api';
 import { ProbeResults } from './ProbeResults';
 import { Loader2, Search, History, Bell } from 'lucide-react';
 
@@ -24,50 +24,99 @@ export function ProbePlayground({
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ProbeResult | null>(null);
   const [history, setHistory] = useState<{ id: string; target: string; timestamp: string }[]>([]);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [selectedHistoryId, setSelectedHistoryId] = useState('');
   const [alertEmail, setAlertEmail] = useState('');
   const [alertMsg, setAlertMsg] = useState<string | null>(null);
+  const [alertIsError, setAlertIsError] = useState(false);
+
+  const probeSeq = useRef(0);
+  const autoRan = useRef(false);
 
   const loadHistory = useCallback(async () => {
-    const h = await fetchHistory();
-    setHistory(h.map((e) => ({ id: e.id, target: e.target, timestamp: e.timestamp })));
+    try {
+      setHistoryError(null);
+      const h = await fetchHistory();
+      setHistory(h.map((e) => ({ id: e.id, target: e.target, timestamp: e.timestamp })));
+    } catch (err) {
+      setHistoryError(err instanceof Error ? err.message : 'Could not load history');
+    }
   }, []);
 
   useEffect(() => {
     loadHistory();
   }, [loadHistory]);
 
+  const runProbeRequest = useCallback(
+    async (probeTarget: string) => {
+      const seq = ++probeSeq.current;
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await runProbe({
+          target: probeTarget.trim(),
+          dnsMode,
+          socketPort,
+        });
+        if (seq !== probeSeq.current) return;
+        setResult(data);
+        await loadHistory();
+      } catch (err) {
+        if (seq !== probeSeq.current) return;
+        setError(err instanceof Error ? err.message : 'Probe failed');
+      } finally {
+        if (seq === probeSeq.current) setLoading(false);
+      }
+    },
+    [dnsMode, socketPort, loadHistory],
+  );
+
   const handleProbe = useCallback(async () => {
     if (!target.trim()) {
       setError('Enter a domain, IP, or hostname:port');
       return;
     }
-    setLoading(true);
-    setError(null);
-    setResult(null);
-    try {
-      const data = await runProbe({ target: target.trim(), dnsMode, socketPort });
-      setResult(data);
-      await loadHistory();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Probe failed');
-    } finally {
-      setLoading(false);
+    if (socketPort < 1 || socketPort > 65535 || Number.isNaN(socketPort)) {
+      setError('Banner port must be between 1 and 65535');
+      return;
     }
-  }, [target, dnsMode, socketPort, loadHistory]);
+    await runProbeRequest(target);
+  }, [target, socketPort, runProbeRequest]);
 
   useEffect(() => {
-    if (autoRun && initialTarget?.trim()) {
-      void handleProbe();
-    }
-  }, [autoRun, initialTarget, handleProbe]);
+    if (!autoRun || !initialTarget?.trim() || autoRan.current) return;
+    autoRan.current = true;
+    void runProbeRequest(initialTarget);
+  }, [autoRun, initialTarget, runProbeRequest]);
+
+  const handleHistorySelect = async (id: string) => {
+    setSelectedHistoryId(id);
+    const h = history.find((x) => x.id === id);
+    if (!h) return;
+    setTarget(h.target);
+    const entry = await fetchHistoryEntry(id);
+    if (entry?.result) setResult(entry.result);
+    setSelectedHistoryId('');
+  };
 
   const handleSubscribe = async () => {
-    if (!alertEmail || !target.trim()) return;
+    setAlertIsError(false);
+    if (!target.trim()) {
+      setAlertMsg('Enter a probe target first');
+      setAlertIsError(true);
+      return;
+    }
+    if (!alertEmail.trim()) {
+      setAlertMsg('Enter an email address');
+      setAlertIsError(true);
+      return;
+    }
     try {
       const msg = await subscribeAlerts(alertEmail, target.trim());
       setAlertMsg(msg);
     } catch (err) {
       setAlertMsg(err instanceof Error ? err.message : 'Failed');
+      setAlertIsError(true);
     }
   };
 
@@ -117,7 +166,7 @@ export function ProbePlayground({
               min={1}
               max={65535}
               value={socketPort}
-              onChange={(e) => setSocketPort(Number(e.target.value))}
+              onChange={(e) => setSocketPort(Number(e.target.value) || 80)}
               className="w-20 rounded border border-[var(--border)] bg-white px-2 py-1"
             />
           </label>
@@ -141,15 +190,10 @@ export function ProbePlayground({
             <History className="h-4 w-4 text-[var(--muted)]" />
             <select
               className="flex-1 rounded border border-[var(--border)] bg-white px-2 py-1"
-              onChange={(e) => {
-                const h = history.find((x) => x.id === e.target.value);
-                if (h) setTarget(h.target);
-              }}
-              defaultValue=""
+              value={selectedHistoryId}
+              onChange={(e) => void handleHistorySelect(e.target.value)}
             >
-              <option value="" disabled>
-                Recent probes…
-              </option>
+              <option value="">Recent probes…</option>
               {history.map((h) => (
                 <option key={h.id} value={h.id}>
                   {h.target} — {new Date(h.timestamp).toLocaleString()}
@@ -158,11 +202,19 @@ export function ProbePlayground({
             </select>
           </div>
         )}
+        {historyError && (
+          <p className="mt-2 text-xs text-[var(--muted)]" role="status">
+            {historyError}
+          </p>
+        )}
 
         {error && (
           <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-[var(--danger)]" role="alert">
             {error}
           </p>
+        )}
+        {loading && result && (
+          <p className="mt-2 text-xs text-[var(--muted)]">Refreshing probe…</p>
         )}
       </section>
 
@@ -192,7 +244,14 @@ export function ProbePlayground({
             Subscribe
           </button>
         </div>
-        {alertMsg && <p className="mt-2 text-xs text-[var(--muted)]">{alertMsg}</p>}
+        {alertMsg && (
+          <p
+            className={`mt-2 text-xs ${alertIsError ? 'text-[var(--danger)]' : 'text-[var(--muted)]'}`}
+            role="alert"
+          >
+            {alertMsg}
+          </p>
+        )}
       </section>
     </div>
   );

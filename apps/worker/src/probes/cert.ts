@@ -1,20 +1,24 @@
 import tls from 'node:tls';
 import type { CertInfo, CertResult } from '@tls-dns-checker/shared-types';
 import { normalizeDomain } from '../lib/target.js';
+import { tlsConnectOptions } from '../lib/tls-connect.js';
 
-export async function probeCert(target: string, port = 443): Promise<CertResult> {
+export async function probeCert(
+  target: string,
+  port = 443,
+  isIp = false,
+): Promise<CertResult> {
   const hostname = normalizeDomain(target);
 
   const peerCert = await getPeerCertificate(hostname, port);
   const chain = peerCert ? [parseCert(peerCert, hostname)] : [];
 
-  if (chain.length > 0) {
-    try {
-      const ctLogs = await fetchCtLogs(hostname);
-      chain[0].ctLogs = ctLogs;
-    } catch {
-      /* CT optional */
-    }
+  if (chain.length > 0 && !isIp) {
+    const ctLogs = await Promise.race([
+      fetchCtLogs(hostname),
+      new Promise<CertInfo['ctLogs']>((resolve) => setTimeout(() => resolve([]), 2500)),
+    ]);
+    chain[0].ctLogs = ctLogs;
   }
 
   return { chain, hostname };
@@ -22,14 +26,11 @@ export async function probeCert(target: string, port = 443): Promise<CertResult>
 
 function getPeerCertificate(host: string, port: number): Promise<tls.PeerCertificate | null> {
   return new Promise((resolve) => {
-    const socket = tls.connect(
-      { host, port, servername: host, rejectUnauthorized: false, timeout: 8000 },
-      () => {
-        const cert = socket.getPeerCertificate(true);
-        socket.end();
-        resolve(cert && Object.keys(cert).length > 0 ? cert : null);
-      },
-    );
+    const socket = tls.connect(tlsConnectOptions(host, port), () => {
+      const cert = socket.getPeerCertificate(true);
+      socket.end();
+      resolve(cert && Object.keys(cert).length > 0 ? cert : null);
+    });
     socket.on('error', () => resolve(null));
     socket.on('timeout', () => {
       socket.destroy();
@@ -60,6 +61,14 @@ function parseCert(cert: tls.PeerCertificate, hostname: string): CertInfo {
   }
   if (sans.length === 0 && typeof subject === 'string') sans.push(subject);
 
+  const curve = (cert as { asn1Curve?: string }).asn1Curve;
+  const bits = (cert as { bits?: number }).bits;
+  const keyAlgorithm = curve
+    ? `ECDSA-${curve}`
+    : bits
+      ? `RSA-${bits}`
+      : undefined;
+
   return {
     subject: String(subject),
     issuer: String(issuer),
@@ -67,12 +76,8 @@ function parseCert(cert: tls.PeerCertificate, hostname: string): CertInfo {
     validTo,
     daysRemaining,
     sans,
-    keyAlgorithm: (cert as { bits?: number }).bits
-      ? `RSA-${(cert as { bits?: number }).bits}`
-      : (cert as { asn1Curve?: string }).asn1Curve
-        ? String((cert as { asn1Curve?: string }).asn1Curve)
-        : undefined,
-    signatureAlgorithm: (cert as { sigalg?: string }).sigalg,
+    keyAlgorithm,
+    signatureAlgorithm: (cert as { signature?: string }).signature,
     serialNumber: cert.serialNumber,
     warning,
     ocsp: { status: 'not-checked', url: undefined },
@@ -82,7 +87,7 @@ function parseCert(cert: tls.PeerCertificate, hostname: string): CertInfo {
 
 async function fetchCtLogs(domain: string): Promise<CertInfo['ctLogs']> {
   const url = `https://crt.sh/?q=${encodeURIComponent(domain)}&output=json`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+  const res = await fetch(url, { signal: AbortSignal.timeout(2500) });
   if (!res.ok) return [];
 
   const entries = (await res.json()) as { issuer_name?: string; not_before?: string }[];

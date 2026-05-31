@@ -1,8 +1,41 @@
 import type { RdapResult } from '@tls-dns-checker/shared-types';
 import { normalizeDomain } from '../lib/target.js';
 
-export async function probeRdap(target: string): Promise<RdapResult> {
+export async function probeRdap(target: string, isIp = false): Promise<RdapResult> {
   const domain = normalizeDomain(target);
+
+  if (isIp) {
+    try {
+      const response = await fetch(`https://rdap.org/ip/${domain}`, {
+        headers: { Accept: 'application/rdap+json' },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!response.ok) {
+        return fallbackWhois(domain, `IP RDAP HTTP ${response.status}`);
+      }
+      const data = (await response.json()) as Record<string, unknown>;
+      const name = (data.name as string) ?? domain;
+      const entities = (data.entities as Record<string, unknown>[]) ?? [];
+      const org = entities
+        .flatMap((e) => {
+          const vcard = e.vcardArray as unknown[];
+          if (!Array.isArray(vcard?.[1])) return [];
+          const fn = (vcard[1] as unknown[][]).find((r) => r[0] === 'fn');
+          return typeof fn?.[3] === 'string' ? [fn[3]] : [];
+        })
+        .find(Boolean);
+      return {
+        domain: name,
+        registrar: org,
+        statuses: (data.status as string[]) ?? [],
+        nameservers: [],
+        contacts: org ? [{ role: 'registrant', name: org }] : [],
+        raw: data,
+      };
+    } catch (err) {
+      return fallbackWhois(domain, err instanceof Error ? err.message : 'IP RDAP failed');
+    }
+  }
 
   try {
     const bootstrap = await fetch('https://data.iana.org/rdap/dns.json', {

@@ -19,8 +19,10 @@ const RECORD_TYPES: DnsRecordType[] = [
 function formatAnswer(type: DnsRecordType, answer: DNS.Packet.Resource): string {
   const a = answer as DNS.Packet.Resource & Record<string, unknown>;
   switch (type) {
-    case 'MX':
-      return `${a.priority} ${a.exchange}`;
+    case 'MX': {
+      const exchange = (a as { exchange?: string }).exchange;
+      return `${a.priority} ${exchange && exchange.trim() ? exchange : '.'}`;
+    }
     case 'NS':
       return String((a as { ns?: string }).ns ?? (a as { domain?: string }).domain ?? a);
     case 'SOA':
@@ -41,12 +43,51 @@ function formatAnswer(type: DnsRecordType, answer: DNS.Packet.Resource): string 
   }
 }
 
+function reverseArpa(ip: string): string | null {
+  const parts = ip.split('.');
+  if (parts.length === 4 && parts.every((p) => /^\d{1,3}$/.test(p))) {
+    return `${parts.reverse().join('.')}.in-addr.arpa`;
+  }
+  return null;
+}
+
 export async function probeDns(
   target: string,
   mode: 'recursive' | 'authoritative' = 'recursive',
+  isIp = false,
 ): Promise<DnsResult> {
   const domain = normalizeDomain(target);
-  const client = new DNS({ dns: '8.8.8.8', timeout: 5000, recursive: true });
+  const client = new DNS({ dns: '1.1.1.1', timeout: 5000, recursive: true });
+
+  if (isIp) {
+    const arpa = reverseArpa(domain);
+    if (!arpa) {
+      return {
+        records: [],
+        dnssec: { validated: false, error: 'Reverse DNS not supported for this address format' },
+        mode,
+      };
+    }
+    const records: DnsRecord[] = [];
+    try {
+      const ptr = await client.resolve(arpa, 'PTR');
+      for (const answer of ptr.answers) {
+        records.push({
+          type: 'PTR',
+          name: arpa,
+          value: String((answer as { domain?: string }).domain ?? answer),
+          ttl: answer.ttl,
+        });
+      }
+    } catch {
+      /* no PTR */
+    }
+    return {
+      records,
+      dnssec: { validated: false, error: 'DNSSEC not applicable to reverse DNS PTR lookup' },
+      mode,
+    };
+  }
 
   if (mode === 'authoritative') {
     try {
@@ -112,16 +153,35 @@ async function validateDnssec(domain: string, client: DNS): Promise<DnsResult['d
     if (ds.answers.length > 0) {
       return {
         validated: false,
-        error: 'DS records found; enable validating resolver for full chain proof',
+        error: 'DS records present; validating resolver did not set AD flag',
         chain: ds.answers.map((a) => {
           const r = a as DNS.Packet.Resource & { keytag?: number; algorithm?: number };
           return `DS ${r.keytag} ${r.algorithm}`;
         }),
       };
     }
-  } catch {
-    /* */
+  } catch (err) {
+    return {
+      validated: false,
+      error: `DS lookup failed: ${err instanceof Error ? err.message : 'SERVFAIL or timeout'}`,
+    };
   }
 
-  return { validated: false, error: 'No DNSSEC validation (unsigned zone or no AD/RRSIG)' };
+  try {
+    const dnskey = await client.resolve(domain, 'DNSKEY');
+    if (dnskey.answers.length > 0) {
+      return {
+        validated: false,
+        error: 'DNSKEY found without AD validation',
+        chain: ['DNSKEY records present'],
+      };
+    }
+  } catch (err) {
+    return {
+      validated: false,
+      error: `DNSKEY lookup failed: ${err instanceof Error ? err.message : 'lookup error'}`,
+    };
+  }
+
+  return { validated: false, error: 'Zone appears unsigned (no DS/DNSKEY)' };
 }

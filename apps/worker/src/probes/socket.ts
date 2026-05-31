@@ -2,13 +2,20 @@ import net from 'node:net';
 import type { SocketResult } from '@tls-dns-checker/shared-types';
 import { normalizeDomain } from '../lib/target.js';
 
+const TIMEOUT_MS = 3000;
+
 export async function probeSocket(target: string, port = 80): Promise<SocketResult> {
   const host = normalizeDomain(target);
   const start = Date.now();
 
+  const payload =
+    port === 443 || port === 8443
+      ? '\r\n'
+      : `GET / HTTP/1.0\r\nHost: ${host}\r\nConnection: close\r\n\r\n`;
+
   return new Promise((resolve) => {
-    const socket = net.connect({ host, port, timeout: 5000 }, () => {
-      socket.write('\r\n');
+    const socket = net.connect({ host, port, timeout: TIMEOUT_MS }, () => {
+      socket.write(payload);
     });
 
     let data = '';
@@ -17,13 +24,16 @@ export async function probeSocket(target: string, port = 80): Promise<SocketResu
       socket.destroy();
     });
 
-    socket.on('close', () => {
+    const finish = (extra?: Partial<SocketResult>) => {
       resolve({
         port,
         banner: data.trim() || undefined,
         timingMs: Date.now() - start,
+        ...extra,
       });
-    });
+    };
+
+    socket.on('close', () => finish());
 
     socket.on('error', (err) => {
       resolve({
@@ -34,13 +44,8 @@ export async function probeSocket(target: string, port = 80): Promise<SocketResu
     });
 
     socket.on('timeout', () => {
-      resolve({
-        port,
-        banner: data.trim() || undefined,
-        error: 'Connection timed out',
-        timingMs: Date.now() - start,
-      });
       socket.destroy();
+      finish({ error: data.trim() ? undefined : 'Connection timed out' });
     });
   });
 }

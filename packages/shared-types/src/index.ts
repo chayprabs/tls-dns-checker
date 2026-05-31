@@ -9,7 +9,8 @@ export type DnsRecordType =
   | 'SRV'
   | 'CAA'
   | 'DS'
-  | 'DNSKEY';
+  | 'DNSKEY'
+  | 'PTR';
 
 export interface DnsRecord {
   type: DnsRecordType;

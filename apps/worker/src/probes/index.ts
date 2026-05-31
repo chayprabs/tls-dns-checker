@@ -14,20 +14,19 @@ export async function runFullProbe(req: ProbeRequest): Promise<ProbeResult> {
   const host = parsed.host;
   const tlsPort = parsed.port ?? 443;
   const socketPort = req.socketPort ?? 80;
-
   const dnsMode = req.dnsMode ?? 'recursive';
 
   const [dns, rdap, http, tlsResult, cert, socket] = await Promise.all([
-    probeDns(host, dnsMode),
-    probeRdap(host),
-    probeHttp(host, tlsPort),
-    probeTls(host, tlsPort),
-    probeCert(host, tlsPort),
+    probeDns(host, dnsMode, parsed.isIp),
+    probeRdap(host, parsed.isIp),
+    probeHttp(req.target, tlsPort),
+    probeTls(host, tlsPort, parsed.isIp),
+    probeCert(host, tlsPort, parsed.isIp),
     probeSocket(host, socketPort),
   ]);
 
   const firstA = dns.records.find((r) => r.type === 'A')?.value;
-  const asn = await probeAsn(host, firstA);
+  const asn = await probeAsn(host, parsed.isIp ? host : firstA, parsed.isIp);
 
   return {
     target: req.target,

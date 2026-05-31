@@ -27,9 +27,14 @@ app.use(
 );
 
 const targetSchema = z.object({
-  target: z.string().min(1).max(253),
+  target: z.string().min(1, 'Target is required').max(253, 'Target too long'),
   dnsMode: z.enum(['recursive', 'authoritative']).optional(),
-  socketPort: z.number().int().min(1).max(65535).optional(),
+  socketPort: z
+    .number()
+    .int()
+    .min(1, 'Port must be at least 1')
+    .max(65535, 'Port must be 65535 or less')
+    .optional(),
 });
 
 app.get('/health', (c) =>
@@ -57,8 +62,8 @@ app.post('/v1/dns', async (c) => {
   const body = targetSchema.safeParse(await c.req.json());
   if (!body.success) return c.json({ error: body.error.flatten() }, 400);
   try {
-    const { host } = parseTarget(body.data.target);
-    const dns = await probeDns(host, body.data.dnsMode ?? 'recursive');
+    const parsed = parseTarget(body.data.target);
+    const dns = await probeDns(parsed.host, body.data.dnsMode ?? 'recursive', parsed.isIp);
     return c.json({ target: body.data.target, dns });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : 'DNS probe failed' }, 400);
@@ -69,8 +74,8 @@ app.post('/v1/rdap', async (c) => {
   const body = targetSchema.safeParse(await c.req.json());
   if (!body.success) return c.json({ error: body.error.flatten() }, 400);
   try {
-    const { host } = parseTarget(body.data.target);
-    const rdap = await probeRdap(host);
+    const parsed = parseTarget(body.data.target);
+    const rdap = await probeRdap(parsed.host, parsed.isIp);
     return c.json({ target: body.data.target, rdap });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : 'RDAP probe failed' }, 400);
@@ -81,8 +86,8 @@ app.post('/v1/asn', async (c) => {
   const body = targetSchema.safeParse(await c.req.json());
   if (!body.success) return c.json({ error: body.error.flatten() }, 400);
   try {
-    const { host } = parseTarget(body.data.target);
-    const asn = await probeAsn(host);
+    const parsed = parseTarget(body.data.target);
+    const asn = await probeAsn(parsed.host, undefined, parsed.isIp);
     return c.json({ target: body.data.target, asn });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : 'ASN probe failed' }, 400);
@@ -94,7 +99,7 @@ app.post('/v1/http', async (c) => {
   if (!body.success) return c.json({ error: body.error.flatten() }, 400);
   try {
     const parsed = parseTarget(body.data.target);
-    const http = await probeHttp(parsed.host, parsed.port ?? 443);
+    const http = await probeHttp(body.data.target, parsed.port ?? 443);
     return c.json({ target: body.data.target, http });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : 'HTTP probe failed' }, 400);
@@ -106,7 +111,7 @@ app.post('/v1/tls', async (c) => {
   if (!body.success) return c.json({ error: body.error.flatten() }, 400);
   try {
     const parsed = parseTarget(body.data.target);
-    const tlsResult = await probeTls(parsed.host, parsed.port ?? 443);
+    const tlsResult = await probeTls(parsed.host, parsed.port ?? 443, parsed.isIp);
     return c.json({ target: body.data.target, tls: tlsResult });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : 'TLS probe failed' }, 400);
@@ -118,7 +123,7 @@ app.post('/v1/cert', async (c) => {
   if (!body.success) return c.json({ error: body.error.flatten() }, 400);
   try {
     const parsed = parseTarget(body.data.target);
-    const cert = await probeCert(parsed.host, parsed.port ?? 443);
+    const cert = await probeCert(parsed.host, parsed.port ?? 443, parsed.isIp);
     return c.json({ target: body.data.target, cert });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : 'Cert probe failed' }, 400);
@@ -151,8 +156,8 @@ app.get('/v1/history/diff/:a/:b', (c) => {
 
 app.post('/v1/alerts/subscribe', async (c) => {
   const schema = z.object({
-    email: z.string().email(),
-    target: z.string().min(1),
+    email: z.string().email('Enter a valid email address'),
+    target: z.string().min(1, 'Target is required'),
     thresholds: z.array(z.number()).optional(),
   });
   const body = schema.safeParse(await c.req.json());

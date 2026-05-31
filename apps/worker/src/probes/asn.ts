@@ -1,8 +1,12 @@
 import DNS from 'dns2';
 import type { AsnResult } from '@tls-dns-checker/shared-types';
 
-export async function probeAsn(target: string, resolvedIp?: string): Promise<AsnResult> {
-  const ip = resolvedIp ?? (await resolveFirstIp(target));
+export async function probeAsn(
+  target: string,
+  resolvedIp?: string,
+  isIp = false,
+): Promise<AsnResult> {
+  const ip = isIp ? target : (resolvedIp ?? (await resolveFirstIp(target)));
   if (!ip) {
     return { ip: target, org: 'Could not resolve IP for ASN lookup' };
   }
