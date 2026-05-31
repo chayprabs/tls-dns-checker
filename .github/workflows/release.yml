@@ -31,4 +31,4 @@ jobs:
         run: docker build -f apps/worker/Dockerfile -t tls-dns-checker-worker:${{ github.ref_name }} .
 
       - name: Build web image
-        run: docker build -f apps/web/Dockerfile -t tls-dns-checker-web:${{ github.ref_name }} .
+        run: docker build -f apps/web/Dockerfile --build-arg WORKER_URL=http://worker:8787 -t tls-dns-checker-web:${{ github.ref_name }} .

@@ -9,7 +9,7 @@ export default function CertExpiryPage() {
   return (
     <div>
       <h1 className="mb-6 text-2xl font-semibold">Certificate Expiry Checker</h1>
-      <ProbePlayground initialTarget="expired.badssl.com" />
+      <ProbePlayground initialTarget="expired.badssl.com" initialTab="cert" autoRun />
     </div>
   );
 }

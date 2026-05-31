@@ -9,7 +9,7 @@ export default function SslCheckerPage() {
   return (
     <div>
       <h1 className="mb-6 text-2xl font-semibold">SSL Checker</h1>
-      <ProbePlayground />
+      <ProbePlayground initialTarget="github.com" initialTab="cert" />
     </div>
   );
 }

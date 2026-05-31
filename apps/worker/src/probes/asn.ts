@@ -23,7 +23,7 @@ export async function probeAsn(target: string, resolvedIp?: string): Promise<Asn
       const asnNum = asn.replace(/^AS/i, '');
       const orgTxt = await dnsTxt(`AS${asnNum}.asn.cymru.com`);
       const orgParts = orgTxt.split('|').map((p) => p.trim());
-      org = orgParts[1];
+      org = orgParts[4] ?? orgParts[orgParts.length - 1];
     }
 
     return {

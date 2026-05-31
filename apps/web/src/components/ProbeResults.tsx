@@ -16,8 +16,14 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]['id'];
 
-export function ProbeResults({ result }: { result: ProbeResult }) {
-  const [tab, setTab] = useState<TabId>('dns');
+export function ProbeResults({
+  result,
+  initialTab,
+}: {
+  result: ProbeResult;
+  initialTab?: TabId;
+}) {
+  const [tab, setTab] = useState<TabId>(initialTab ?? 'dns');
   const certWarning = result.cert.chain[0]?.warning;
 
   return (

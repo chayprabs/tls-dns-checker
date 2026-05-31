@@ -12,11 +12,11 @@ export async function probeRdap(target: string): Promise<RdapResult> {
       services: [string[], string[]][];
     };
 
-    const tld = domain.split('.').pop() ?? domain;
+    const tld = domain.split('.').pop()?.toLowerCase() ?? domain;
     let rdapUrl: string | undefined;
 
-    for (const [, urls] of bootstrapData.services) {
-      if (urls.some((u) => u.includes(tld))) {
+    for (const [tlds, urls] of bootstrapData.services) {
+      if (tlds.some((t) => t.replace(/^\./, '').toLowerCase() === tld)) {
         rdapUrl = urls[0];
         break;
       }

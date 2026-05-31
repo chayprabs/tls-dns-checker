@@ -21,8 +21,10 @@ function formatAnswer(type: DnsRecordType, answer: DNS.Packet.Resource): string 
   switch (type) {
     case 'MX':
       return `${a.priority} ${a.exchange}`;
+    case 'NS':
+      return String((a as { ns?: string }).ns ?? (a as { domain?: string }).domain ?? a);
     case 'SOA':
-      return `${a.nsname} ${a.hostmaster} serial=${(a as { serial?: number }).serial}`;
+      return `${(a as { primary?: string }).primary ?? (a as { nsname?: string }).nsname} ${(a as { admin?: string }).admin ?? (a as { hostmaster?: string }).hostmaster} serial=${(a as { serial?: number }).serial}`;
     case 'SRV':
       return `${a.priority} ${a.weight} ${a.port} ${a.target}`;
     case 'TXT':
@@ -44,7 +46,7 @@ export async function probeDns(
   mode: 'recursive' | 'authoritative' = 'recursive',
 ): Promise<DnsResult> {
   const domain = normalizeDomain(target);
-  const client = new DNS({ dns: '8.8.8.8', timeout: 5000 });
+  const client = new DNS({ dns: '8.8.8.8', timeout: 5000, recursive: true });
 
   if (mode === 'authoritative') {
     try {
@@ -89,10 +91,28 @@ export async function probeDns(
 
 async function validateDnssec(domain: string, client: DNS): Promise<DnsResult['dnssec']> {
   try {
+    const aPacket = await client.resolve(domain, 'A');
+    const header = aPacket.header as { ad?: number };
+    if (header.ad === 1) {
+      return {
+        validated: true,
+        chain: ['Resolver AD flag set on DNSSEC-validated response'],
+      };
+    }
+    const hasRrsig = aPacket.answers.some((ans) => (ans as { type?: number }).type === 46);
+    if (hasRrsig) {
+      return { validated: true, chain: ['RRSIG present in answer'] };
+    }
+  } catch {
+    /* */
+  }
+
+  try {
     const ds = await client.resolve(domain, 'DS');
     if (ds.answers.length > 0) {
       return {
-        validated: true,
+        validated: false,
+        error: 'DS records found; enable validating resolver for full chain proof',
         chain: ds.answers.map((a) => {
           const r = a as DNS.Packet.Resource & { keytag?: number; algorithm?: number };
           return `DS ${r.keytag} ${r.algorithm}`;
@@ -100,21 +120,8 @@ async function validateDnssec(domain: string, client: DNS): Promise<DnsResult['d
       };
     }
   } catch {
-    /* unsigned or no DS */
-  }
-
-  try {
-    const dnskey = await client.resolve(domain, 'DNSKEY');
-    if (dnskey.answers.length > 0) {
-      return {
-        validated: false,
-        error: 'DNSKEY present but DS chain not fully validated in this probe',
-        chain: ['DNSKEY records found'],
-      };
-    }
-  } catch {
     /* */
   }
 
-  return { validated: false, error: 'No DNSSEC chain found (unsigned zone or no DS)' };
+  return { validated: false, error: 'No DNSSEC validation (unsigned zone or no AD/RRSIG)' };
 }

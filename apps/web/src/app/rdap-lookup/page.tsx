@@ -9,7 +9,7 @@ export default function RdapPage() {
   return (
     <div>
       <h1 className="mb-6 text-2xl font-semibold">RDAP Lookup</h1>
-      <ProbePlayground />
+      <ProbePlayground initialTarget="example.com" initialTab="rdap" />
     </div>
   );
 }

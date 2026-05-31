@@ -10,11 +10,9 @@ export async function runProbe(req: ProbeRequest): Promise<ProbeResult> {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    const msg =
-      typeof (err as { error?: unknown }).error === 'string'
-        ? (err as { error: string }).error
-        : JSON.stringify((err as { error?: unknown }).error ?? err);
-    throw new Error(msg || `Probe failed (${res.status})`);
+    throw new Error(
+      formatApiError((err as { error?: unknown }).error, `Probe failed (${res.status})`),
+    );
   }
   return res.json();
 }
@@ -26,13 +24,30 @@ export async function fetchHistory(): Promise<HistoryEntry[]> {
   return data.history ?? [];
 }
 
+function formatApiError(err: unknown, fallback: string): string {
+  if (typeof err === 'string') return err;
+  if (err && typeof err === 'object') {
+    const e = err as { fieldErrors?: Record<string, string[]>; formErrors?: string[] };
+    const parts = [...(e.formErrors ?? [])];
+    if (e.fieldErrors) {
+      for (const [k, v] of Object.entries(e.fieldErrors)) {
+        parts.push(`${k}: ${v.join(', ')}`);
+      }
+    }
+    if (parts.length) return parts.join('; ');
+  }
+  return fallback;
+}
+
 export async function subscribeAlerts(email: string, target: string): Promise<string> {
   const res = await fetch(`${API_BASE}/v1/alerts/subscribe`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, target, thresholds: [30, 14, 7, 1] }),
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error((data as { message?: string }).message ?? 'Subscribe failed');
-  return (data as { message: string }).message;
+  const data = (await res.json()) as { message?: string; error?: unknown };
+  if (!res.ok) {
+    throw new Error(formatApiError(data.error, data.message ?? 'Subscribe failed'));
+  }
+  return data.message ?? 'Subscribed';
 }

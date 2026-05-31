@@ -9,7 +9,7 @@ export default function DnsCheckerPage() {
   return (
     <div>
       <h1 className="mb-6 text-2xl font-semibold">DNS Checker</h1>
-      <ProbePlayground />
+      <ProbePlayground initialTarget="example.com" initialTab="dns" />
     </div>
   );
 }

@@ -9,7 +9,7 @@ export default function DnssecPage() {
   return (
     <div>
       <h1 className="mb-6 text-2xl font-semibold">DNSSEC Validator</h1>
-      <ProbePlayground initialTarget="dnssec.works" />
+      <ProbePlayground initialTarget="dnssec.works" initialTab="dns" autoRun />
     </div>
   );
 }

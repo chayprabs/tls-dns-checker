@@ -8,7 +8,15 @@ import { Loader2, Search, History, Bell } from 'lucide-react';
 
 const SAMPLES = ['example.com', 'google.com', 'github.com'];
 
-export function ProbePlayground({ initialTarget }: { initialTarget?: string }) {
+export function ProbePlayground({
+  initialTarget,
+  initialTab,
+  autoRun = false,
+}: {
+  initialTarget?: string;
+  initialTab?: 'dns' | 'rdap' | 'asn' | 'http' | 'tls' | 'cert' | 'socket';
+  autoRun?: boolean;
+}) {
   const [target, setTarget] = useState(initialTarget ?? '');
   const [dnsMode, setDnsMode] = useState<'recursive' | 'authoritative'>('recursive');
   const [socketPort, setSocketPort] = useState(80);
@@ -28,7 +36,7 @@ export function ProbePlayground({ initialTarget }: { initialTarget?: string }) {
     loadHistory();
   }, [loadHistory]);
 
-  const handleProbe = async () => {
+  const handleProbe = useCallback(async () => {
     if (!target.trim()) {
       setError('Enter a domain, IP, or hostname:port');
       return;
@@ -45,7 +53,13 @@ export function ProbePlayground({ initialTarget }: { initialTarget?: string }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [target, dnsMode, socketPort, loadHistory]);
+
+  useEffect(() => {
+    if (autoRun && initialTarget?.trim()) {
+      void handleProbe();
+    }
+  }, [autoRun, initialTarget, handleProbe]);
 
   const handleSubscribe = async () => {
     if (!alertEmail || !target.trim()) return;
@@ -152,7 +166,7 @@ export function ProbePlayground({ initialTarget }: { initialTarget?: string }) {
         )}
       </section>
 
-      {result && <ProbeResults result={result} />}
+      {result && <ProbeResults result={result} initialTab={initialTab} />}
 
       <section className="rounded-xl border border-dashed border-[var(--border)] bg-[#fafafa] p-4">
         <div className="flex items-center gap-2 text-sm font-medium">

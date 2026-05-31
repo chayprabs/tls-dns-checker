@@ -68,8 +68,10 @@ function parseCert(cert: tls.PeerCertificate, hostname: string): CertInfo {
     daysRemaining,
     sans,
     keyAlgorithm: (cert as { bits?: number }).bits
-      ? `${(cert as { pubkey?: Buffer }).pubkey?.readUInt8(0) ?? 'RSA'}`
-      : undefined,
+      ? `RSA-${(cert as { bits?: number }).bits}`
+      : (cert as { asn1Curve?: string }).asn1Curve
+        ? String((cert as { asn1Curve?: string }).asn1Curve)
+        : undefined,
     signatureAlgorithm: (cert as { sigalg?: string }).sigalg,
     serialNumber: cert.serialNumber,
     warning,

@@ -9,7 +9,7 @@ export default function TlsCheckerPage() {
   return (
     <div>
       <h1 className="mb-6 text-2xl font-semibold">TLS Checker</h1>
-      <ProbePlayground />
+      <ProbePlayground initialTarget="google.com" initialTab="tls" />
     </div>
   );
 }
