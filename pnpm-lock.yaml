@@ -70,8 +70,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/shared-types
       dns2:
-        specifier: ^2.1.0
-        version: 2.4.0
+        specifier: ^3.0.0
+        version: 3.0.0
       hono:
         specifier: ^4.6.14
         version: 4.12.23
@@ -918,8 +918,8 @@ packages:
     resolution: {integrity: sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==}
     engines: {node: '>=8'}
 
-  dns2@2.4.0:
-    resolution: {integrity: sha512-bfp/GkZMTUKTgJw++sHbaOs1iep8tMzo1I9P0oFIVBh+t0yt4HfOrx9BfGfs+Gum/g8eaZNEESuyQRcLuFfQ/A==}
+  dns2@3.0.0:
+    resolution: {integrity: sha512-Tlpq92NzSwYtMw/s0P9rhLzSI+e6PohlOnvGJ1napsE60KcA02zYSwuMysEzuBam6FPDP0nsFXArspdixRAxaA==}
 
   enhanced-resolve@5.22.1:
     resolution: {integrity: sha512-6QEuw3zoX1SJQc7b87aBXke/no+mG2bTBgw29gWMQonLmpEkWoCAVkl+M49e48AZlWzxiDzDZzYdp6kobcyLww==}
@@ -1794,7 +1794,7 @@ snapshots:
 
   detect-libc@2.1.2: {}
 
-  dns2@2.4.0: {}
+  dns2@3.0.0: {}
 
   enhanced-resolve@5.22.1:
     dependencies:
